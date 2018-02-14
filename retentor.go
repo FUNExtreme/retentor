@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	minio "github.com/minio/minio-go"
 )
@@ -92,7 +93,46 @@ func main() {
 			spaceObj.timeUtc = pathSplit[pathDescriptor.timeUtc]
 		}
 		spaceObjects = append(spaceObjects, *spaceObj)
-		fmt.Println(spaceObj)
 	}
+
+	spaceObjectsByDate := make(map[string][]spaceObject)
+	for _, obj := range spaceObjects {
+		spaceObjectsByDate[obj.dateUtc] = append(spaceObjectsByDate[obj.dateUtc], obj)
+	}
+
+	currentTime := time.Now().UTC()
+	for _, retentionPolicy := range RetentionPolicies {
+		fmt.Println("------------------------")
+		fmt.Println("policy:", retentionPolicy.PolicyType)
+		fmt.Println("---")
+		startTime := time.Date(currentTime.Year(), currentTime.Month(), currentTime.Day(), 0, 0, 0, 0, currentTime.Location()).AddDate(0, 0, -retentionPolicy.StartsAfterDays)
+		endTime := startTime.AddDate(0, 0, -retentionPolicy.ValidForDays)
+		fmt.Println("start (inclusive):", startTime.Format("20060102"))
+		fmt.Println("end (exclusive):", endTime.Format("20060102"))
+		fmt.Println("---")
+
+		policyObjects := []spaceObject{}
+		for date, objects := range spaceObjectsByDate {
+			objDate, _ := time.Parse("20060102", date)
+			if (startTime.Equal(objDate) || startTime.After(objDate)) && endTime.Before(objDate) {
+				for _, obj := range objects {
+					policyObjects = append(policyObjects, obj)
+					fmt.Println("Object within policy date range: " + obj.path)
+				}
+			}
+		}
+
+		//markedForDeletionObjects := []spaceObject{}
+		switch retentionPolicy.PolicyType {
+		//case RetentionPolicyHourly:
+		//case RetentionPolicySixHourly:
+		//case RetentionPolicyDaily:
+		//case RetentionPolicyWeekly:
+		//case RetentionPolicyMonthly:
+		default:
+			fmt.Println("No code for this retention policy")
+		}
+	}
+
 	return
 }
